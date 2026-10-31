@@ -60,6 +60,17 @@
   - Nested LR-stack probe (honest inner 5-fold seed-111 stacking of the 3 OOF vectors via LogisticRegression, 0.5 s): OOF **0.761969, delta −0.000141 → USE_STACK=False, NOT adopted** (reported honestly; linear weighted blend retained).
   - CSV: `output/submission_improved_v3_2.csv`, 61500 rows, TARGET range [0.002623, 0.761151], Unix newlines, IDs match test.csv + sample_submission.csv.
   - Artifacts: `tutorial_improved_v3_2.ipynb` (executed, figures embedded), `output/submission_improved_v3_2.csv`, `tutorial_improved_v3_2.zip` (ONLY the .ipynb — verified via zipfile listing).
+- **v4.0 (MEASURED this session — executed notebook `tutorial_improved_v4_0.ipynb`, 9 code cells, zero markdown/raw, zero errors; ran green ONCE after a config-name fix — first build unconsciously probed `LGBM_BIG`/1500-leaf63 as lgbm3 and shipped OOF 0.761866; builder patched to probe `LGBM_B`/2000-lr0.01 and the notebook was re-executed; shipped numbers are from the corrected executed notebook):**
+  - In-notebook ablation (3-fold, single seed 42, shared splits; base reproduction): lgbm_base OOF **0.758503**; lgbm_B (2000/lr0.01) OOF **0.758706** (exact reproduction of v3.1, best LGBM); lgbm_E (leaves15) OOF 0.758636; lgbm_F (1200/lr0.015/leaf63/mc120) OOF 0.756843; **lgbm_dart (500/lr0.05/drop0.15) OOF 0.749903 — far below base, DROPPED**; xgb_base OOF **0.758948** (best XGB); xgb_E (700/lr0.03/mcw120) OOF 0.758588; **xgb_dart (400/lr0.05/rate_drop0.1/one_drop) OOF 0.743228 — far below base, DROPPED**; decisions: best_lgbm=lgbm3(B), USE_XGB=True, dart NOT adopted, adopted models {lgbm3, xgb}.
+  - Full run `StratifiedKFold(5, shuffle, seed 42)`, lgbm3 + xgb seed-averaged over {42–48} (ablation 501 s + full 1478 s, dart rejected so no extra fits):
+    - lgbm3 (2000/lr0.01/31/80, 7 seeds) OOF **0.761756** (folds identical to v3.1/v3.2 lgbm2)
+    - xgb (1000/lr0.02/leaf31, 7 seeds) OOF **0.761471** (identical to v3.1/v3.2)
+  - Winning blend (OOF-selected: singles + pairs step 0.02): **{lgbm3: 0.56, xgb: 0.44} OOF 0.762109** (equal to v3.2 optimum; predictions bit-identical to v3.2 CSV).
+  - Nested LR-stack probe: OOF 0.762005, delta −0.000105 → NOT adopted (linear retained; stack has now lost in both v3.2 and v4.0).
+  - Honest verdict: v4.0 OOF gain = **0.000000** — dart modes and wider HP breadth all measured worse than the v3.1 winners; the ablation gate correctly shipped the unchanged-winning config. OOF remains 0.762109.
+  - CatBoost route was attempted first via `pip install catboost` but no Python-3.14 wheel is available in this environment (install timed out / module absent) — excluded as planned-fallback; dart probes replaced it as the new-model-family lever.
+  - CSV: `output/submission_improved_v4_0.csv`, 61500 rows, TARGET range [0.002623, 0.761151], Unix newlines, IDs match test.csv + sample_submission.csv, predictions verified identical to `submission_improved_v3_2.csv`.
+  - Artifacts: `tutorial_improved_v4_0.ipynb` (executed, figures embedded), `output/submission_improved_v4_0.csv`, `tutorial_improved_v4_0.zip` (ONLY the .ipynb — verified via zipfile listing).
 
 ## v2.0 model config
 
@@ -208,6 +219,31 @@
 
 - `tutorial_improved_v3_1.ipynb`: entire pipeline reused; logistic-regression stacking probe is standard practice implemented with sklearn `LogisticRegression` + sklearn `StratifiedKFold` (no external code copied).
 
+## v4.0 model config
+
+- Features: UNCHANGED v2.6-verified 103-col set; in-fold frequency + smoothed target encoding (60) of CAT8, fit on train folds only.
+- Probes (3-fold, seed 42, shared splits): lgbm {base 1000/lr0.02/31/80, B 2000/lr0.01/31/80, E leaves15, F 1200/lr0.015/leaf63/mc120, dart 500/lr0.05/drop_rate0.15/skip_drop0.5}, xgb {base 1000/lr0.02/leaf31/mcw80, E 700/lr0.03/leaf31/mcw120, dart 400/lr0.05/rate_drop0.1/one_drop}. Gating: best-LGBM by measured OOF shipped as lgbm; up to 2 extra LGBM configs adopted only if ≥ best; dart adopted only if ≥ best non-dart of its family (NOT met); xgb family included if best xgb ≥ best lgbm (met). Adopted: {lgbm3 (2000/lr0.01), xgb (1000/lr0.02)}.
+- Models in full run (native NaN, no imputer, test preds fold-averaged, OOF weights {lgbm3:0.56, xgb:0.44}, clipped [0,1]): lgbm3 and xgb seed-averaged over {42–48}.
+- Seeds: 42 (numpy/random/SKF/splits) + {42–48} model-seed averaging; dart probes used single seed 42 at 3-fold only.
+- Validation: `StratifiedKFold(n_splits=5, shuffle=True, random_state=42)`; nested LR-stack probe (inner 5-fold, seed 111) retained — measured loss again (−0.000105) → linear blend shipped.
+- Runtime: ablation 501 s, full 1478 s (~33 min total).
+
+## v4.0 pre-submission rule checklist (MUST_FOLLOW_RULES.md §10)
+
+- [x] Only `input/train.csv` and `input/test.csv` used — no external data (CatBoost was NOT installed/used; dart probes are library features of lightgbm/xgboost).
+- [x] No test predictions hand-labeled or manually overridden (TARGET = OOF-selected linear blend of two trained GBMs; dart/HP adoption decided by measured ablation OOF only).
+- [x] Random seeds set (42 splits; 111 stack probe; {42–48} model-seed averaging).
+- [x] Process regenerates the CSV (executed notebook, headless re-runnable; green via `python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=5400`; one honest config-name fix + re-execution documented above).
+- [x] Referenced code cited (notebook print cell + Code citations below).
+- [x] CSV matches `sample_submission.csv`: columns [SK_ID_CURR, TARGET] in order, 61500 rows, IDs equal test SK_ID_CURR and sample_submission SK_ID_CURR, 0 NaN, probs in [0.002623, 0.761151] ⊂ [0,1], Unix newlines, header `SK_ID_CURR,TARGET` (in-notebook AND standalone validation; also verified bit-identical predictions to v3.2 CSV).
+- [x] TARGET = model-generated probabilities.
+- [x] Intended file: `output/submission_improved_v4_0.csv`. Protected files unmodified (verified by validate script flow; v2.0–v3.2 artifacts untouched).
+- [x] HARD FORMAT RULE: notebook has ZERO markdown/raw cells (9 code cells only) and code cells have NO comment lines and NO docstrings (verified via `ast.parse` + scan of every cell source). Zip created post-execution via script, contains ONLY the .ipynb.
+
+## v4.0 code citations
+
+- `tutorial_improved_v3_2.ipynb`: entire pipeline reused; v4.0 additions are LightGBM `boosting_type="dart"` (drop_rate/skip_drop) and XGBoost `booster="dart"` (rate_drop/one_drop) probes plus two wider LGBM configs and one wider XGB config — all standard library parameters selected/dropped by the measured 3-fold ablation (no external code copied).
+
 ## Compliance notes
 
 - Execution used `python -m nbconvert` (nbconvert 7.17.1) instead of `python -m jupyter nbconvert` because the `jupyter-nbconvert` entry point is absent in this environment; identical converter, same `--ExecutePreprocessor.timeout=1200`.
@@ -238,4 +274,8 @@
 - `tutorial_improved_v3_2.ipynb` (executed, figures embedded)
 - `output/submission_improved_v3_2.csv`
 - `tutorial_improved_v3_2.zip` (contains ONLY the .ipynb — verified via zipfile listing)
+- `tutorial_improved_v4_0.ipynb` (executed, figures embedded)
+- `output/submission_improved_v4_0.csv`
+- `tutorial_improved_v4_0.zip` (contains ONLY the .ipynb — verified via zipfile listing)
+- `README.md` (project summary, updated to v4.0)
 - `tracker.md` (this file)

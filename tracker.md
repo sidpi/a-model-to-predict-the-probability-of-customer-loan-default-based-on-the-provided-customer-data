@@ -104,6 +104,109 @@
   - CSV: `output/submission_improved_v2_6.csv`, 61500 rows, TARGET range [0.002551, 0.757258], Unix newlines, IDs match test.csv + sample_submission.csv.
   - Artifacts: `tutorial_improved_v2_6.ipynb` (executed, 9 code cells, outputs embedded), `output/submission_improved_v2_6.csv`, `tutorial_improved_v2_6.zip` (ONLY the .ipynb — verified via zipfile listing).
 
+- **v3.0 (MEASURED this session — executed notebook `tutorial_improved_v3_0.ipynb`, 9 code cells, zero markdown/raw, zero errors):**
+  - In-notebook ablation (3-fold, single seed 42, shared splits): base_lgbm folds [0.758996/0.759601/0.756960] OOF **0.758503** (exact reproduction of v2.6 LGBM baseline, confirms pipeline integrity); new_lgbm (v2.6 features + 17 NEW v3.0 features) folds [0.758877/0.758830/0.757235] OOF **0.758300** (DELTA **−0.000203** → USE_NEW=False, DROPPED); new_lgbm_big (1500/leaf63) OOF **0.753484** (WEAKER, dropped); new_xgb folds [0.760139/0.758698/0.758416] OOF **0.759064** (beats LGBM reference → KEPT); new_hgb OOF 0.754479 (DELTA −0.004024 → HGB dropped from full run).
+  - Full run `StratifiedKFold(5, shuffle, seed 42)`, each config seed-averaged over {42,43,44,45,46} per fold (ablation 261 s + full 841 s ≈ 19 min):
+    - lgbm (LGBM w/ v2.6-verified params 1000/lr0.02/31/80) OOF **0.761453** (folds 0.757564/0.763843/0.766511/0.757017/0.762534 — identical to v2.6, expected since USE_NEW=False)
+    - xgb (XGBoost hist/lossguide 1000/lr0.02/max_leaves31/mcw80/colsample0.8/subsample0.9/α0.1/λ1.0, native NaN) OOF **0.761440** (folds 0.758635/0.762889/0.766420/0.757674/0.761778, avg 172 s/fold with 10 fits/fold)
+  - Winning blend (OOF-selected: singles + pairs step 0.05): **{lgbm: 0.5, xgb: 0.5} OOF 0.761980**.
+  - Delta vs v2.6 measured blend 0.761453: **+0.000527** (first blend to beat pure LGBM; HGB excluded on measured evidence — lost ablation and its v2.6 blend never won). v2.6-new17 features probed and DROPPED (−0.000203 at 3-fold) — reported honestly above; USE_NEW gated the full run to the validated 103-col feature set.
+  - CSV: `output/submission_improved_v3_0.csv`, 61500 rows, TARGET range [0.002606, 0.764328], Unix newlines, IDs match test.csv + sample_submission.csv.
+  - Artifacts: `tutorial_improved_v3_0.ipynb` (executed, figures embedded), `output/submission_improved_v3_0.csv`, `tutorial_improved_v3_0.zip` (ONLY the .ipynb — verified via zipfile listing).
+
+- **v3.1 (MEASURED this session — executed notebook `tutorial_improved_v3_1.ipynb`, 9 code cells, zero markdown/raw, zero errors):**
+  - In-notebook ablation (3-fold, single seed 42, shared splits, exact v3.0 base reproduction): lgbm_base OOF **0.758503** (folds [0.758996/0.759601/0.756960], identical to v3.0/v2.6, pipeline integrity); lgbm_A (leaf63/mc100/ff0.7) OOF 0.755726 (worse); lgbm_B (n_estimators=2000/lr=0.01) folds [0.759784/0.758674/0.757690] OOF **0.758706** (DELTA +0.000203 → kept as lgbm2); lgbm_C (extra_trees/leaf63) OOF 0.751800 (much worse); xgb_base OOF **0.758948** (best xgb); xgb_A (depthwise/depth7) 0.757555 (worse); xgb_B (600/lr0.03/leaf63) 0.758429 (≤ base, dropped); decisions: USE_XGB=True, extra_xgb=None, extra_lgbm=lgbm2.
+  - Full run `StratifiedKFold(5, shuffle, seed 42)`, seed-averaging extended {42–48} (7 seeds); ablation 267 s + full 1835 s (avg ~367 s/fold, 21 fits/fold):
+    - lgbm (v2.6-verified params 1000/lr0.02/31/80, 7 seeds) OOF **0.761520** (folds 0.757637/0.763907/0.766572/0.757090/0.762591 — +0.000067 vs 5-seed v3.0)
+    - lgbm2 (2000/lr0.01/31/80, 7 seeds) OOF **0.761756** (folds 0.758144/0.764060/0.766509/0.757647/0.762626 — best single model ever measured in this repo)
+    - xgb (v3.0 config 1000/lr0.02/leaf31, 7 seeds) OOF **0.761471** (folds 0.758698/0.762892/0.766474/0.757646/0.761862)
+  - Winning blend (OOF-selected: singles + pairs step 0.05): **{lgbm2: 0.55, xgb: 0.45} OOF 0.762109** (lgbm weight 0.0).
+  - Delta vs v3.0 measured blend 0.761980: **+0.000129**. Delta vs v2.6-pure-LGBM 0.761453: +0.000656. Honest increments this iteration; lgbm_B and 7-seed averaging are the measured winners, lgbm_A/lgbm_C/xgb_A/xgb_B all dropped.
+  - CSV: `output/submission_improved_v3_1.csv`, 61500 rows, TARGET range [0.002623, 0.761345], Unix newlines, IDs match test.csv + sample_submission.csv.
+  - Artifacts: `tutorial_improved_v3_1.ipynb` (executed, figures embedded), `output/submission_improved_v3_1.csv`, `tutorial_improved_v3_1.zip` (ONLY the .ipynb — verified via zipfile listing).
+
+## v3.1 model config
+
+- Features: UNCHANGED v2.6-verified 103-col set (v3.0 measured the 17 NEW candidates at −0.000203 and they stayed dropped); in-fold frequency + smoothed target encoding (60) of CAT8, fit on train folds only.
+- Models (all native NaN, no imputer, test preds fold-averaged, OOF weights {lgbm2:0.55, xgb:0.45}, clipped [0,1]):
+  - lgbm = LGBMClassifier(1000, lr0.02, leaves31, mc80, ff0.8, bag0.8/1, λl1 0.1, λl2 1.0, deterministic) seeds {42–48}
+  - lgbm2 = LGBMClassifier(2000, lr0.01, leaves31, mc80, ff0.8, bag0.8/1, λl1 0.1, λl2 1.0, deterministic) seeds {42–48}
+  - xgb = XGBClassifier(1000, lr0.02, lossguide/max_leaves31/hist, mcw80, colsample0.8, subsample0.9, α0.1, λ1.0, auc) seeds {42–48}
+- Seeds: 42 (numpy/random/SKF/splits) + {42,43,44,45,46,47,48} model-seed averaging.
+- Validation: `StratifiedKFold(n_splits=5, shuffle=True, random_state=42)`; 3-fold shared-split ablation gates lgbm2 inclusion (winner params by measured OOF, ties→base) and xgb inclusion (max xgb ≥ max lgbm reference).
+- Runtime: total ≈ 35 min (ablation 267 s, full 1835 s).
+
+## v3.1 pre-submission rule checklist (MUST_FOLLOW_RULES.md §10)
+
+- [x] Only `input/train.csv` and `input/test.csv` used — no external data.
+- [x] No test predictions hand-labeled or manually overridden (TARGET = OOF-selected blend of three trained GBMs).
+- [x] Random seeds set (42 splits; {42–48} model-seed averaging; LGBM deterministic; XGB random_state per seed).
+- [x] Process regenerates the CSV (executed notebook, headless re-runnable; green via `python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=3000`).
+- [x] Referenced code cited (notebook print cell + Code citations below).
+- [x] CSV matches `sample_submission.csv`: columns [SK_ID_CURR, TARGET] in order, 61500 rows, IDs equal test SK_ID_CURR and sample_submission SK_ID_CURR, 0 NaN, probs in [0.002623, 0.761345] ⊂ [0,1], Unix newlines, header `SK_ID_CURR,TARGET` (in-notebook AND standalone validation).
+- [x] TARGET = model-generated probabilities.
+- [x] Intended file: `output/submission_improved_v3_1.csv`. Protected files unmodified (input/, tutorial.ipynb, v1.4 artifacts, v2.6 artifacts, v3.0 artifacts untouched).
+- [x] HARD FORMAT RULE: notebook has ZERO markdown/raw cells (9 code cells only) and code cells have NO comment lines and NO docstrings (verified via `ast.parse` + scan of every cell source). Zip created post-execution via script, contains ONLY the .ipynb.
+
+## Code citations (v3.1 additions)
+
+- `tutorial_improved_v3_0.ipynb`: whole pipeline (features, encode_all/encode_pair, ablation gating, full CV, blend grid, hardened CSV writer) reused; v3.1 changes are LGBM/XGB hyperparameter probes, 7-seed averaging, and spec-name de-duplication.
+- LightGBM `extra_trees`/`n_estimators=2000`/`feature_fraction` variants and XGBoost `grow_policy=depthwise`/600-iter variants: standard library parameters selected by the measured 3-fold ablation (no external code copied).
+
+- **v3.2 (MEASURED this session — executed notebook `tutorial_improved_v3_2.ipynb`, 9 code cells, zero markdown/raw, zero errors):**
+  - Full CV reproduced v3.1 exactly (same seeds/features — lgbm 0.761520, lgbm2 0.761756, xgb 0.761471; full 2003 s), confirming determinism across sessions.
+  - Blend refinement (finer grids: pairs step 0.02, triples step 0.05): best linear **{lgbm2: 0.56, xgb: 0.44} OOF 0.762109** (same optimum as v3.1's {0.55, 0.45} within grid tolerance).
+  - Nested LR-stack probe (honest inner 5-fold seed-111 stacking of the 3 OOF vectors via LogisticRegression, 0.5 s): OOF **0.761969, delta −0.000141 → USE_STACK=False, NOT adopted** (reported honestly; linear weighted blend retained).
+  - CSV: `output/submission_improved_v3_2.csv`, 61500 rows, TARGET range [0.002623, 0.761151], Unix newlines, IDs match test.csv + sample_submission.csv.
+  - Artifacts: `tutorial_improved_v3_2.ipynb` (executed, figures embedded), `output/submission_improved_v3_2.csv`, `tutorial_improved_v3_2.zip` (ONLY the .ipynb — verified via zipfile listing).
+
+## v3.2 model config
+
+- Identical to v3.1 (features 103-col v2.6 set; lgbm/lgbm2/xgb with {42–48}; 5-fold seed 42) — v3.2 only changes the blend cell: finer weight grids and a nested LR-stack probe whose outcome gates whether the final predictions come from the stack (LogisticRegression(max_iter=1000) refit on all OOF, applied to test preds) or the linear weighted blend. Measured outcome: linear.
+
+## v3.2 pre-submission rule checklist (MUST_FOLLOW_RULES.md §10)
+
+- [x] Only `input/train.csv` and `input/test.csv` used — no external data.
+- [x] No test predictions hand-labeled or manually overridden (TARGET = OOF-selected linear blend of three trained GBMs; stack probe is a programmatic, OOF-measured decision).
+- [x] Random seeds set (42 splits; 111 for nested stack probe; {42–48} model-seed averaging).
+- [x] Process regenerates the CSV (executed notebook, headless re-runnable; green via `python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=3000`).
+- [x] Referenced code cited (notebook print cell + Code citations below).
+- [x] CSV matches `sample_submission.csv`: columns [SK_ID_CURR, TARGET] in order, 61500 rows, IDs equal test SK_ID_CURR and sample_submission SK_ID_CURR, 0 NaN, probs in [0.002623, 0.761151] ⊂ [0,1], Unix newlines, header `SK_ID_CURR,TARGET` (in-notebook AND standalone validation).
+- [x] TARGET = model-generated probabilities.
+- [x] Intended file: `output/submission_improved_v3_2.csv`. Protected files unmodified.
+- [x] HARD FORMAT RULE: notebook has ZERO markdown/raw cells (9 code cells only) and code cells have NO comment lines and NO docstrings (verified via `ast.parse` + scan of every cell source). Zip created post-execution via script, contains ONLY the .ipynb.
+
+## Code citations (v3.2 additions)
+
+- `tutorial_improved_v3_1.ipynb`: entire pipeline reused; logistic-regression stacking probe is standard practice implemented with sklearn `LogisticRegression` + sklearn `StratifiedKFold` (no external code copied).
+
+## v3.0 model config
+
+- Features: v2.6 `add_features_v2` + NEW9 VERBATIM (103 cols, train 171202×103 / test 61500×103). NEW17 v3.0 candidates — `EXT_SOURCE_TRIPLE`, `EXT_SOURCE_{1,2,3}_AGE_PROD`, `EXT_SOURCE_{1,2,3}_AGE_RATIO`, `EXT_SOURCE_{1,2,3}_EMPLOYED_PROD`, `OCC_IS_MISSING`, `INCOME_MINUS_ANNUITY`, `GOODS_INCOME_RATIO`, `BUREAU_YEAR_SHARE`, `PHONE_AGE_RATIO`, `CREDIT_PER_CHILD`, `EXT_MEAN_RATING_PROD` (120 cols) — built and asserted, then measurably DROPPED by the 3-fold ablation (−0.000203) and excluded from the shipped features via the USE_NEW flag (no leakage: flag is OOF-driven).
+- Encoding: in-fold frequency + smoothed target encoding (smoothing=60) for CAT8, fit on train folds only.
+- Models: lgbm = LGBMClassifier (n_estimators=1000, lr=0.02, num_leaves=31, min_child_samples=80, feature_fraction 0.8, bagging 0.8/1, λl1 0.1, λl2 1.0, deterministic=True), native NaN, no imputer; xgb = XGBClassifier (n_estimators=1000, lr=0.02, max_leaves=31, grow_policy=lossguide, tree_method=hist, min_child_weight=80, colsample_bytree=0.8, subsample=0.9, α0.1, λ1.0, eval_metric=auc), native NaN. HistGradientBoosting probed in ablation (0.754479, worse) and excluded.
+- Seeds: 42 (numpy/random/SKF/splits) + {42,43,44,45,46} model-seed averaging; test preds fold-averaged then OOF-selected blend weights {lgbm:0.5, xgb:0.5}, clipped [0,1].
+- Validation: `StratifiedKFold(n_splits=5, shuffle=True, random_state=42)`; 3-fold shared-split ablation precedes the full run and gates USE_NEW/USE_XGB/USE_HGB programmatically.
+- EDA (analysis only, never prediction rules): v2.6 set (missing bar, TARGET imbalance, DAYS_EMPLOYED 365243 anomaly, AGE dist, EXT_SOURCE_2/3 KDEs by TARGET) plus NEW: default-rate bars by EXT_SOURCE_2 decile, by AGE_YEARS bins, by REGION_RATING_CLIENT, and TARGET-correlation bar of 15 key numeric features.
+
+## v3.0 pre-submission rule checklist (MUST_FOLLOW_RULES.md §10)
+
+- [x] Only `input/train.csv` and `input/test.csv` used — no external data (xgboost 3.4.1 is a modeling library, not data; dropped 17-candidate features were built from these files only).
+- [x] No test predictions hand-labeled or manually overridden (TARGET = OOF-selected lgbm/xgb blend output; ablation-gated USE_NEW is measured, programmatic feature selection, not a prediction rule).
+- [x] Random seeds set (42 for splits; {42–46} model-seed averaging; LGBM deterministic; XGB random_state per seed).
+- [x] Process regenerates the CSV (executed notebook, headless re-runnable; green via `python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=2400`).
+- [x] Referenced code cited (notebook print cell + Code citations below).
+- [x] CSV matches `sample_submission.csv`: columns [SK_ID_CURR, TARGET] in order, 61500 rows, IDs equal test SK_ID_CURR and sample_submission SK_ID_CURR, 0 NaN, probs in [0.002606, 0.764328] ⊂ [0,1], Unix newlines, header `SK_ID_CURR,TARGET` (validated in-notebook AND by standalone script).
+- [x] TARGET = model-generated probabilities (OOF-winning blend weights, clipped).
+- [x] Intended file: `output/submission_improved_v3_0.csv`. Protected files unmodified (input/, tutorial.ipynb, tutorial_improved_v1_4/, submission_improved_v1_4.csv, v2.6 artifacts untouched — verified by mtime listing).
+- [x] HARD FORMAT RULE: notebook has ZERO markdown/raw cells (9 code cells only) and code cells have NO comment lines and NO docstrings (verified via `ast.parse` + `#`/triple-quote scan of every cell source; plot titles/labels are string literals only). Zip created post-execution via script, contains ONLY the .ipynb.
+
+## Code citations (v3.0 additions)
+
+- `tutorial_improved_v2_6.ipynb`: add_features_v2 + add_row_features_v2_5 + freq/smoothed-TE(60) + encode helpers + StratifiedKFold(5) + OOF grid-search blend + hardened CSV writer reused VERBATIM.
+- XGBoost (xgboost 3.4.1, `XGBClassifier`): standard gradient-boosting library API (no copied external code); parameters (hist/lossguide, max_leaves 31, min_child_weight 80) selected by the measured 3-fold ablation above.
+- New v3.0 candidate features: EXT-source polynomial/age/employed interactions and ratio features derived from the provided column descriptions and measured by ablation (kept only if they improved OOF — they did not, and were dropped).
+
 ## v2.6 model config
 
 - Features: v2.5 `add_features_v2` + NEW9 row features VERBATIM (train 171202×103, test 61500×103) + in-fold frequency + smoothed (60) target encoding of CAT8 only. Rank/percentile (7 cols, concat train+test rank(pct=True), label-free), pruned groupby (9 cols: EXT_SOURCE_MEAN+AGE means + sizes per OCCUPATION_TYPE/ORGANIZATION_TYPE/NAME_EDUCATION_TYPE), and pair-TE (OCCUPATION_TYPE×ORGANIZATION_TYPE, NAME_EDUCATION_TYPE×OCCUPATION_TYPE) were all probed in-fold and DROPPED after measuring zero/negative deltas. No leakage (all maps fit on train folds only; rank is unsupervised).
